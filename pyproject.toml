@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vsandbox"
+version = "0.1.0"
+description = "Prototype deferred-readiness sandbox runtime and trace replay evaluator."
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+vsandbox = "vsandbox.cli:main"
+
