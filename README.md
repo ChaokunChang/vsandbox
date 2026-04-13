@@ -23,11 +23,15 @@ Run the unit tests:
 python3 -m unittest discover -s tests
 ```
 
-Analyze the provided Terminal-Bench trace corpus:
+Analyze the provided Terminal-Bench or Mini-SWE-Agent trace corpora:
 
 ```bash
 python3 -m vsandbox replay \
   --traces /root/workspace/agent-cr/results/traces/tbench-claude-code-claude-opus4.6-trajectories \
+  --json
+
+python3 -m vsandbox replay \
+  --traces /root/workspace/agent-cr/results/traces/mini-swe-agent/runs/minimax_verified_test_seed42_n200_resolved_128 \
   --json
 ```
 
@@ -65,7 +69,7 @@ sandbox.shutdown()
 
 ## Trace Replay Output
 
-The replay analyzer emits an aggregate summary and per-install opportunities. It estimates:
+The replay analyzer supports Claude Code ATIF trajectories and Mini-SWE-Agent `mini-swe-agent-1.1` trajectories. It emits an aggregate summary and per-install opportunities. It estimates:
 
 - eager install block time from adjacent ATIF timestamps
 - slack from install completion to the next Python/test barrier
@@ -73,4 +77,3 @@ The replay analyzer emits an aggregate summary and per-install opportunities. It
 - residual barrier stall as `max(0, eager_block - slack)`
 
 These are analytical estimates, not ground truth timings. They are useful for ranking workloads and validating whether deferred readiness is worth prototyping further.
-

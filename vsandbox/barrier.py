@@ -228,20 +228,29 @@ def imports_for_python_command(
     return ()
 
 
+_TRACE_PIP_INSTALL_RE = re.compile(
+    r"(?:^|[;&|\s])(?:uv\s+pip|python(?:3(?:\.\d+)?)?\s+-m\s+pip|pip3?|pipx)\s+"
+    r"(?:install|sync|add)\b|\bpoetry\s+(?:add|install)\b|\bpipenv\s+install\b",
+    re.IGNORECASE,
+)
+
+_TRACE_PYTHON_BARRIER_RE = re.compile(
+    r"(?:^|[;&|\s])(?:python(?:3(?:\.\d+)?)?|pytest|py\.test|ipython|jupyter|streamlit|"
+    r"uv\s+run\s+python|uv\s+run\s+pytest)\b|\b(?:tox|nox|coverage\s+run)\b",
+    re.IGNORECASE,
+)
+
+
 def trace_command_has_pip_install(command: str) -> bool:
-    pattern = re.compile(
-        r"(?:^|[;&|\s])(?:uv\s+pip|python(?:3(?:\.\d+)?)?\s+-m\s+pip|pip3?|pipx)\s+"
-        r"(?:install|sync|add)\b|\bpoetry\s+(?:add|install)\b|\bpipenv\s+install\b",
-        re.IGNORECASE,
-    )
-    return bool(pattern.search(command))
+    return bool(_TRACE_PIP_INSTALL_RE.search(command))
 
 
 def trace_command_is_python_barrier(command: str) -> bool:
-    pattern = re.compile(
-        r"(?:^|[;&|\s])(?:python(?:3(?:\.\d+)?)?|pytest|py\.test|ipython|jupyter|streamlit|"
-        r"uv\s+run\s+python|uv\s+run\s+pytest)\b|\b(?:tox|nox|coverage\s+run)\b",
-        re.IGNORECASE,
-    )
-    return bool(pattern.search(command))
+    return bool(_TRACE_PYTHON_BARRIER_RE.search(command))
 
+
+def trace_command_has_python_barrier_after_pip(command: str) -> bool:
+    pip_match = _TRACE_PIP_INSTALL_RE.search(command)
+    if pip_match is None:
+        return False
+    return bool(_TRACE_PYTHON_BARRIER_RE.search(command[pip_match.end():]))
