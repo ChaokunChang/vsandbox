@@ -124,6 +124,65 @@ class TraceReplayAnalyzerTests(unittest.TestCase):
         self.assertEqual(opportunity.estimated_saved_s, 4.0)
         self.assertEqual(summary.total_trace_duration_s, 21.0)
 
+    def test_parses_terminus_bash_command_keystrokes_and_durations(self) -> None:
+        payload = {
+            "schema_version": "ATIF-v1.6",
+            "session_id": "terminus-demo",
+            "agent": {"name": "terminus-2", "version": "2.0.0"},
+            "steps": [
+                {"source": "user", "timestamp": "2026-02-07T00:00:00.000Z", "message": "task"},
+                {
+                    "source": "agent",
+                    "timestamp": "2026-02-07T00:00:10.000Z",
+                    "tool_calls": [
+                        {
+                            "function_name": "bash_command",
+                            "tool_call_id": "tool-1",
+                            "arguments": {"keystrokes": "pip install pandas\n", "duration": 4.0},
+                        },
+                        {
+                            "function_name": "bash_command",
+                            "tool_call_id": "tool-2",
+                            "arguments": {"keystrokes": "ls -la\n", "duration": 2.0},
+                        },
+                    ],
+                    "observation": {"results": [{"content": "ok"}]},
+                },
+                {
+                    "source": "agent",
+                    "timestamp": "2026-02-07T00:00:30.000Z",
+                    "tool_calls": [
+                        {
+                            "function_name": "bash_command",
+                            "tool_call_id": "tool-3",
+                            "arguments": {"keystrokes": "python -c 'import pandas'\n", "duration": 1.0},
+                        }
+                    ],
+                    "observation": {"results": [{"content": "ok"}]},
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            task_dir = Path(tmp, "terminus-demo")
+            task_dir.mkdir()
+            trace = task_dir / "trajectory.json"
+            trace.write_text(json.dumps(payload), encoding="utf-8")
+            summary, opportunities = TraceReplayAnalyzer(tmp).analyze()
+
+        self.assertEqual(summary.trace_count, 1)
+        self.assertEqual(summary.bash_command_count, 3)
+        self.assertEqual(summary.pip_install_count, 1)
+        self.assertEqual(summary.traces_with_pip_install, 1)
+        self.assertEqual(summary.opportunity_trace_count, 1)
+        opportunity = opportunities[0]
+        self.assertEqual(opportunity.trace_id, "terminus-demo")
+        self.assertEqual(opportunity.command, "pip install pandas")
+        self.assertEqual(opportunity.install_visible_block_s, 4.0)
+        self.assertEqual(opportunity.slack_to_barrier_s, 16.0)
+        self.assertEqual(opportunity.estimated_saved_s, 4.0)
+        self.assertEqual(opportunity.residual_barrier_stall_s, 0.0)
+        self.assertEqual(summary.total_trace_duration_s, 31.0)
+
     def test_same_command_pip_and_python_barrier_has_no_savings(self) -> None:
         payload = {
             "trajectory_format": "mini-swe-agent-1.1",

@@ -77,10 +77,10 @@ class TraceReplayAnalyzer:
             except (OSError, json.JSONDecodeError):
                 continue
             trace_key = str(trace_path)
-            duration = _trace_duration_s(payload)
+            bash_events = list(_bash_events(payload))
+            duration = _trace_duration_s(payload, bash_events)
             if duration is not None:
                 trace_durations[trace_key] = duration
-            bash_events = list(_bash_events(payload))
             bash_count += len(bash_events)
             trace_has_pip = False
             for event_index, event in enumerate(bash_events):
@@ -205,23 +205,45 @@ def _bash_events(payload: dict[str, Any]) -> Iterable[_BashEvent]:
     for step_index, step in enumerate(steps):
         if not isinstance(step, dict):
             continue
-        timestamp_s = _parse_timestamp(step.get("timestamp"))
+        issued_at_s = _parse_timestamp(step.get("timestamp"))
         tool_calls = step.get("tool_calls")
         if not isinstance(tool_calls, list):
             continue
+        elapsed_in_step_s = 0.0
         for tool_call in tool_calls:
-            if not isinstance(tool_call, dict) or tool_call.get("function_name") != "Bash":
+            if not isinstance(tool_call, dict):
                 continue
+            function_name = tool_call.get("function_name")
             arguments = tool_call.get("arguments")
             if not isinstance(arguments, dict):
                 continue
-            command = arguments.get("command")
+            if function_name == "Bash":
+                command = arguments.get("command")
+                command_issued_at_s = None
+                command_completed_at_s = issued_at_s
+            elif function_name == "bash_command":
+                command = arguments.get("keystrokes")
+                duration_s = _non_negative_float(arguments.get("duration"))
+                command_issued_at_s = issued_at_s + elapsed_in_step_s if issued_at_s is not None else None
+                if duration_s is None:
+                    command_completed_at_s = None
+                elif command_issued_at_s is None:
+                    command_completed_at_s = None
+                else:
+                    command_completed_at_s = command_issued_at_s + duration_s
+                if duration_s is not None:
+                    elapsed_in_step_s += duration_s
+            else:
+                continue
             if isinstance(command, str):
+                normalized_command = _normalize_terminal_keystrokes(command)
+                if not normalized_command:
+                    continue
                 yield _BashEvent(
                     step_index=step_index,
-                    issued_at_s=None,
-                    completed_at_s=timestamp_s,
-                    command=command,
+                    issued_at_s=command_issued_at_s,
+                    completed_at_s=command_completed_at_s,
+                    command=normalized_command,
                 )
 
 
@@ -316,12 +338,17 @@ def _trace_id(trace_path: Path, payload: dict[str, Any]) -> str:
     return trace_path.name.removesuffix("-traj.json")
 
 
-def _trace_duration_s(payload: dict[str, Any]) -> float | None:
+def _trace_duration_s(payload: dict[str, Any], bash_events: Iterable[_BashEvent] = ()) -> float | None:
     timestamps: list[float] = []
     for value in _iter_payload_timestamps(payload):
         parsed = _parse_timestamp(value)
         if parsed is not None:
             timestamps.append(parsed)
+    for event in bash_events:
+        if event.issued_at_s is not None:
+            timestamps.append(event.issued_at_s)
+        if event.completed_at_s is not None:
+            timestamps.append(event.completed_at_s)
     if len(timestamps) < 2:
         return None
     return max(0.0, max(timestamps) - min(timestamps))
@@ -372,6 +399,16 @@ def _safe_fraction(numerator: float, denominator: float) -> float | None:
     if denominator <= 0.0:
         return None
     return numerator / denominator
+
+
+def _non_negative_float(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return max(0.0, float(value))
+    return None
+
+
+def _normalize_terminal_keystrokes(value: str) -> str:
+    return value.strip()
 
 
 def _one_line(value: str) -> str:

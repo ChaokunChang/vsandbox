@@ -5,7 +5,7 @@ This repository contains a small prototype for Deferred-Readiness Sandboxes. It 
 The prototype has two parts:
 
 - A live process/venv backend that logically commits pip installs immediately, realizes them asynchronously, and blocks at Python execution barriers.
-- A trace replay analyzer for Claude Code ATIF trajectories that estimates how much eager pip-install blocking could be hidden by deferred realization.
+- A trace replay analyzer for Claude Code, Terminus ATIF, and Mini-SWE-Agent trajectories that estimates how much eager pip-install blocking could be hidden by deferred realization.
 
 This is not a security sandbox. The first backend is a local process backend because Docker is present on this machine but the current sandbox cannot access `/var/run/docker.sock`. A container backend can be added later behind the same runtime API.
 
@@ -32,6 +32,10 @@ python3 -m vsandbox replay \
 
 python3 -m vsandbox replay \
   --traces /root/workspace/agent-cr/results/traces/mini-swe-agent/runs/minimax_verified_test_seed42_n200_resolved_128 \
+  --json
+
+python3 -m vsandbox replay \
+  --traces /root/workspace/agent-cr/results/traces/tbench-terminus-all/submissions/terminal-bench/2.0/Terminus2__GPT-5.3-Codex \
   --json
 ```
 
@@ -69,9 +73,10 @@ sandbox.shutdown()
 
 ## Trace Replay Output
 
-The replay analyzer supports Claude Code ATIF trajectories and Mini-SWE-Agent `mini-swe-agent-1.1` trajectories. It emits an aggregate summary and per-install opportunities. It estimates:
+The replay analyzer supports Claude Code ATIF trajectories, Terminus ATIF `bash_command` trajectories, and Mini-SWE-Agent `mini-swe-agent-1.1` trajectories. It emits an aggregate summary and per-install opportunities. It estimates:
 
 - eager install block time from adjacent ATIF timestamps
+- eager install block time from Terminus `bash_command` durations when available
 - slack from install completion to the next Python/test barrier
 - hideable time as `min(eager_block, slack)`
 - residual barrier stall as `max(0, eager_block - slack)`
