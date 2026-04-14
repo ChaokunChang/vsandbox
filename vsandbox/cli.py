@@ -11,6 +11,7 @@ from pathlib import Path
 from .graph import JobResult, RealizationNode
 from .replay import TraceReplayAnalyzer, analysis_to_json, write_opportunities_csv
 from .runtime import VirtualSandbox
+from .whatif import FutureBenefitAnalyzer, summary_to_json as whatif_summary_to_json
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,6 +31,10 @@ def main(argv: list[str] | None = None) -> int:
     replay_parser.add_argument("--json", action="store_true", help="emit full JSON output")
     replay_parser.add_argument("--csv", type=Path, default=None, help="write per-opportunity CSV")
 
+    whatif_parser = subparsers.add_parser("whatif", help="estimate additional deferred-readiness mechanisms")
+    whatif_parser.add_argument("--traces", type=Path, required=True)
+    whatif_parser.add_argument("--limit", type=int, default=None)
+
     args = parser.parse_args(argv)
     if args.command_name == "demo":
         return _demo(args.delay)
@@ -37,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_once(args.workspace, args.command)
     if args.command_name == "replay":
         return _replay(args.traces, limit=args.limit, emit_json=args.json, csv_path=args.csv)
+    if args.command_name == "whatif":
+        return _whatif(args.traces, limit=args.limit)
     parser.error("unknown command")
     return 2
 
@@ -95,4 +102,10 @@ def _replay(traces: Path, *, limit: int | None, emit_json: bool, csv_path: Path 
         print(analysis_to_json(summary, opportunities))
     else:
         print(json.dumps(asdict(summary), indent=2, sort_keys=True))
+    return 0
+
+
+def _whatif(traces: Path, *, limit: int | None) -> int:
+    summary = FutureBenefitAnalyzer(traces, limit=limit).analyze()
+    print(whatif_summary_to_json(summary))
     return 0

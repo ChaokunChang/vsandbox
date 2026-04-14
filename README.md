@@ -37,6 +37,9 @@ python3 -m vsandbox replay \
 python3 -m vsandbox replay \
   --traces /root/workspace/agent-cr/results/traces/tbench-terminus-all/submissions/terminal-bench/2.0/Terminus2__GPT-5.3-Codex \
   --json
+
+python3 -m vsandbox whatif \
+  --traces /root/workspace/agent-cr/results/traces/tbench-terminus-all/submissions/terminal-bench/2.0/Terminus2__GPT-5.3-Codex
 ```
 
 Run one command in a fresh sandbox:
@@ -82,3 +85,14 @@ The replay analyzer supports Claude Code ATIF trajectories, Terminus ATIF `bash_
 - residual barrier stall as `max(0, eager_block - slack)`
 
 These are analytical estimates, not ground truth timings. They are useful for ranking workloads and validating whether deferred readiness is worth prototyping further.
+
+## What-If Estimates
+
+The `whatif` command estimates additional speculative mechanisms from the same normalized trace events:
+
+- deferred apt-style system dependency realization
+- deferred git clone and download realization
+- lazy base image/filesystem readiness hidden behind the first model turn
+- incremental fine-grained Python import blocking, modeled as 1s, 5s, and 15s of pre-import work inside the Python barrier
+
+These estimates are independent scenarios and should not be summed without a more detailed overlap model.
