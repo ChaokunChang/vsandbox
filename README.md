@@ -92,6 +92,7 @@ The `whatif` command estimates additional speculative mechanisms from the same n
 
 - deferred apt-style system dependency realization
 - deferred git clone and download realization
+- speculative readiness prediction for likely installs, clones, and downloads
 - lazy base image/filesystem readiness hidden behind the first model turn
 - incremental fine-grained Python import blocking, modeled as 1s, 5s, and 15s of pre-import work inside the Python barrier
 

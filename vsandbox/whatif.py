@@ -5,7 +5,7 @@ import re
 import statistics
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .barrier import (
     trace_command_has_pip_install,
@@ -149,6 +149,16 @@ def _trace_mechanism_savings(payload: dict[str, object], events: list[_BashEvent
         name = f"fine_import_{int(delay_s)}s"
         savings[name] = _fine_import_incremental_savings(payload, events, delay_s)
 
+    spec_pip = _speculative_source_savings(payload, events, trace_command_has_pip_install)
+    spec_apt = _speculative_source_savings(payload, events, _regex_matcher(_TRACE_APT_INSTALL_RE))
+    spec_git = _speculative_source_savings(payload, events, _regex_matcher(_TRACE_GIT_CLONE_RE))
+    spec_download = _speculative_source_savings(payload, events, _regex_matcher(_TRACE_DOWNLOAD_RE))
+    savings["spec_pip_oracle"] = spec_pip
+    savings["spec_apt_oracle"] = spec_apt
+    savings["spec_git_clone_oracle"] = spec_git
+    savings["spec_download_oracle"] = spec_download
+    savings["spec_all_oracle"] = spec_pip + spec_apt + spec_git + spec_download
+
     return savings
 
 
@@ -223,6 +233,26 @@ def _fine_import_incremental_savings(
     return savings
 
 
+def _speculative_source_savings(
+    payload: dict[str, object],
+    events: list[_BashEvent],
+    source_matches: Callable[[str], bool],
+) -> list[float]:
+    trace_start_s = _trace_start_s(payload, events)
+    savings: list[float] = []
+    for event in events:
+        if not source_matches(event.command):
+            continue
+        visible_block = _visible_block(payload, event)
+        issue_s = _event_issue_estimate_s(payload, event)
+        if trace_start_s is None or visible_block is None or issue_s is None:
+            savings.append(0.0)
+            continue
+        pre_issue_slack_s = max(0.0, issue_s - trace_start_s)
+        savings.append(min(visible_block, pre_issue_slack_s))
+    return savings
+
+
 def _next_python_dependency_barrier_index(events: list[_BashEvent], install_index: int) -> int | None:
     install_event = events[install_index]
     if trace_command_has_python_barrier_after_pip(install_event.command):
@@ -278,8 +308,22 @@ def _event_issued_s(event: _BashEvent) -> float | None:
     return event.issued_at_s if event.issued_at_s is not None else event.timestamp_s
 
 
+def _event_issue_estimate_s(payload: dict[str, object], event: _BashEvent) -> float | None:
+    if event.issued_at_s is not None:
+        return event.issued_at_s
+    completed_at_s = _event_completed_s(event)
+    visible_block = _visible_block(payload, event)
+    if completed_at_s is not None and visible_block is not None:
+        return completed_at_s - visible_block
+    return event.timestamp_s
+
+
 def _event_completed_s(event: _BashEvent) -> float | None:
     return event.completed_at_s if event.completed_at_s is not None else event.timestamp_s
+
+
+def _regex_matcher(pattern: re.Pattern[str]) -> Callable[[str], bool]:
+    return lambda command: bool(pattern.search(command))
 
 
 def _mechanism_estimate(
